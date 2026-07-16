@@ -51,17 +51,17 @@ impl FilterDesignConstruct {
 
         let ap_rows = ind_p.len();
         let mut ap = Arr::zeros(ap_rows, n);
-        for i in 0..ap_rows {
+        for (i, &p) in ind_p.iter().enumerate().take(ap_rows) {
             for j in 0..n {
-                ap.set(i, j, a.get(ind_p[i], j));
+                ap.set(i, j, a.get(p, j));
             }
         }
 
         let as_rows = ind_s.len();
         let mut as_ = Arr::zeros(as_rows, n);
-        for i in 0..as_rows {
+        for (i, &s) in ind_s.iter().enumerate().take(as_rows) {
             for j in 0..n {
-                as_.set(i, j, a.get(ind_s[i], j));
+                as_.set(i, j, a.get(s, j));
             }
         }
 

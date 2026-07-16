@@ -60,15 +60,15 @@ pub fn spectral_fact_fft(r: &Arr) -> Arr {
 
     // Flip negative frequencies, zero DC and Nyquist
     let half = m / 2;
-    for i in half..m {
-        alphatmp[i] = -alphatmp[i];
+    for x in alphatmp.iter_mut().skip(half) {
+        *x = -*x;
     }
     alphatmp[0] = Complex::new(0.0, 0.0);
     alphatmp[half] = Complex::new(0.0, 0.0);
 
     // Multiply by j (rotate by 90°): (a + jb) * j = -b + ja
-    for i in 0..m {
-        alphatmp[i] = Complex::new(-alphatmp[i].im, alphatmp[i].re);
+    for x in alphatmp.iter_mut() {
+        *x = Complex::new(-x.im, x.re);
     }
     fft_inv.process(&mut alphatmp);
 
