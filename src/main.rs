@@ -59,22 +59,54 @@ struct VerilogSpec {
     form: String,
 }
 
-fn default_filter_order() -> usize { 32 }
-fn default_passband_edge() -> f64 { 0.12 }
-fn default_stopband_edge() -> f64 { 0.20 }
-fn default_passband_ripple() -> f64 { 0.125 }
-fn default_stopband_attenuation() -> f64 { 0.125 }
-fn default_csd_nnz() -> u32 { 7 }
-fn default_discretization_factor() -> usize { 15 }
-fn default_max_iters() -> usize { 50000 }
-fn default_tolerance() -> f64 { 1e-14 }
-fn default_ellipsoid_radius() -> f64 { 40.0 }
-fn default_parallel_cut() -> bool { true }
-fn default_spectral_method() -> String { "fft".to_string() }
-fn default_root_tolerance() -> f64 { 1e-8 }
-fn default_input_width() -> i32 { 16 }
-fn default_module_name() -> String { "fir_filter".to_string() }
-fn default_verilog_form() -> String { "transpose".to_string() }
+fn default_filter_order() -> usize {
+    32
+}
+fn default_passband_edge() -> f64 {
+    0.12
+}
+fn default_stopband_edge() -> f64 {
+    0.20
+}
+fn default_passband_ripple() -> f64 {
+    0.125
+}
+fn default_stopband_attenuation() -> f64 {
+    0.125
+}
+fn default_csd_nnz() -> u32 {
+    7
+}
+fn default_discretization_factor() -> usize {
+    15
+}
+fn default_max_iters() -> usize {
+    50000
+}
+fn default_tolerance() -> f64 {
+    1e-14
+}
+fn default_ellipsoid_radius() -> f64 {
+    40.0
+}
+fn default_parallel_cut() -> bool {
+    true
+}
+fn default_spectral_method() -> String {
+    "fft".to_string()
+}
+fn default_root_tolerance() -> f64 {
+    1e-8
+}
+fn default_input_width() -> i32 {
+    16
+}
+fn default_module_name() -> String {
+    "fir_filter".to_string()
+}
+fn default_verilog_form() -> String {
+    "transpose".to_string()
+}
 
 #[derive(Serialize)]
 struct Output {

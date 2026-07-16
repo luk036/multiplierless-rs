@@ -69,6 +69,11 @@ impl OracleOptimQ<Arr> for LowpassOracleQ {
         let hc_adj = match hc {
             ParallelCut(b0, b1) => ParallelCut(b0 + dot_val, b1.map(|b| b + dot_val)),
         };
-        ( (gc, hc_adj), shrunk, self.rcsd.clone(), self.num_retries < 15 )
+        (
+            (gc, hc_adj),
+            shrunk,
+            self.rcsd.clone(),
+            self.num_retries < 15,
+        )
     }
 }

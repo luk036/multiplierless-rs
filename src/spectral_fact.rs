@@ -5,7 +5,6 @@ use num_complex::Complex;
 use rustfft::FftPlanner;
 use std::f64::consts::TAU;
 
-
 /// Spectral factorization via FFT (Kolmogorov 1939).
 pub fn spectral_fact_fft(r: &Arr) -> Arr {
     let n = r.len();
