@@ -1,15 +1,15 @@
 [package]
 name = "multiplierless-rs"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 description = "Multiplierless FIR Filter optimization (using Ellipsoid Method) — Rust port"
 repository = "https://github.com/luk036/multiplierless-rs"
 license = "MIT OR Apache-2.0"
 
 [dependencies]
-ellalgo-rs = { path = "../ellalgo-rs" }
-csd-rs = { path = "../csd-rs" }
-ginger-rs = { path = "../ginger-rs" }
+ellalgo-rs = "0.1.8"
+csd-rs = "0.1.6"
+ginger-rs = "0.1.5"
 rustfft = "6.2"
 num-complex = "0.4"
 serde = { version = "1", features = ["derive"] }
