@@ -92,24 +92,53 @@ pub struct LowpassOracle {
     i_ap: usize,
     i_as: usize,
     i_anr: usize,
+    g_buf: Arr, // pre-allocated gradient buffer
 }
 
 impl LowpassOracle {
     pub fn new(fdc: FilterDesignConstruct) -> Self {
+        let n = fdc.n;
         Self {
             fdc,
             i_ap: 0,
             i_as: 0,
             i_anr: 0,
+            g_buf: Arr::new(n),
         }
     }
 
+    /// Dot product — sequential with auto-vectorization.
+    /// For n=32, the compiler unrolls and SIMD-vectorizes this better than rayon.
+    #[inline]
     fn dot_row(&self, mat: &Arr, row: usize, x: &Arr) -> f64 {
-        let mut sum = 0.0;
-        for j in 0..x.len() {
-            sum += mat.get(row, j) * x[j];
+        let n = mat.cols();
+        let start = row * n;
+        let row_data = &mat.data()[start..start + n];
+        row_data
+            .iter()
+            .zip(x.data().iter())
+            .map(|(a, b)| a * b)
+            .sum()
+    }
+
+    /// Fill a pre-allocated gradient buffer from a matrix row (memcpy).
+    /// Returns a clone of the buffer (avoids per-allocation Vec::new overhead).
+    #[inline]
+    fn fill_grad(g_buf: &mut Arr, mat: &Arr, row: usize, sign: f64) -> Arr {
+        let n = mat.cols();
+        let start = row * n;
+        let row_data = &mat.data()[start..start + n];
+        // SAFETY: g_buf is sized to mat.cols() and row_data is mat.cols()
+        unsafe {
+            std::ptr::copy_nonoverlapping(row_data.as_ptr(), g_buf.data_mut().as_mut_ptr(), n);
         }
-        sum
+        let mut g = g_buf.clone();
+        if sign < 0.0 {
+            for v in g.data_mut() {
+                *v = -*v;
+            }
+        }
+        g
     }
 }
 
@@ -130,19 +159,13 @@ impl OracleOptim<Arr> for LowpassOracle {
             }
             let v = self.dot_row(&self.fdc.ap, self.i_ap, x);
             if v > self.fdc.upsq {
-                let mut g = Arr::new(self.fdc.ap.cols());
-                for j in 0..self.fdc.ap.cols() {
-                    g[j] = self.fdc.ap.get(self.i_ap, j);
-                }
+                let g = Self::fill_grad(&mut self.g_buf, &self.fdc.ap, self.i_ap, 1.0);
                 let cut = ParallelCut(v - self.fdc.upsq, Some(v - self.fdc.lpsq));
                 self.i_ap += 1;
                 return ((g, cut), false);
             }
             if v < self.fdc.lpsq {
-                let mut g = Arr::new(self.fdc.ap.cols());
-                for j in 0..self.fdc.ap.cols() {
-                    g[j] = -self.fdc.ap.get(self.i_ap, j);
-                }
+                let g = Self::fill_grad(&mut self.g_buf, &self.fdc.ap, self.i_ap, -1.0);
                 let cut = ParallelCut(-v + self.fdc.lpsq, Some(-v + self.fdc.upsq));
                 self.i_ap += 1;
                 return ((g, cut), false);
@@ -159,19 +182,13 @@ impl OracleOptim<Arr> for LowpassOracle {
             }
             let v = self.dot_row(&self.fdc.as_, self.i_as, x);
             if v > *spsq {
-                let mut g = Arr::new(self.fdc.as_.cols());
-                for j in 0..self.fdc.as_.cols() {
-                    g[j] = self.fdc.as_.get(self.i_as, j);
-                }
+                let g = Self::fill_grad(&mut self.g_buf, &self.fdc.as_, self.i_as, 1.0);
                 let cut = ParallelCut(v - *spsq, Some(v));
                 self.i_as += 1;
                 return ((g, cut), false);
             }
             if v < 0.0 {
-                let mut g = Arr::new(self.fdc.as_.cols());
-                for j in 0..self.fdc.as_.cols() {
-                    g[j] = -self.fdc.as_.get(self.i_as, j);
-                }
+                let g = Self::fill_grad(&mut self.g_buf, &self.fdc.as_, self.i_as, -1.0);
                 let cut = ParallelCut(-v, Some(-v + *spsq));
                 self.i_as += 1;
                 return ((g, cut), false);
@@ -190,10 +207,7 @@ impl OracleOptim<Arr> for LowpassOracle {
             }
             let v = self.dot_row(&self.fdc.anr, self.i_anr, x);
             if v < 0.0 {
-                let mut g = Arr::new(self.fdc.anr.cols());
-                for j in 0..self.fdc.anr.cols() {
-                    g[j] = -self.fdc.anr.get(self.i_anr, j);
-                }
+                let g = Self::fill_grad(&mut self.g_buf, &self.fdc.anr, self.i_anr, -1.0);
                 let cut = ParallelCut(-v, None);
                 self.i_anr += 1;
                 return ((g, cut), false);
@@ -202,10 +216,7 @@ impl OracleOptim<Arr> for LowpassOracle {
         }
 
         *spsq = fmax;
-        let mut g = Arr::new(self.fdc.as_.cols());
-        for j in 0..self.fdc.as_.cols() {
-            g[j] = self.fdc.as_.get(imax, j);
-        }
+        let g = Self::fill_grad(&mut self.g_buf, &self.fdc.as_, imax, 1.0);
         let cut = ParallelCut(0.0, Some(fmax));
         ((g, cut), true)
     }

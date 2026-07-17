@@ -2,35 +2,39 @@ use ellalgo_rs::arr::Arr;
 use ginger::aberth::{aberth_autocorr, initial_aberth_autocorr, poly_from_roots};
 use ginger::rootfinding::Options as GingerOptions;
 use num_complex::Complex;
+use realfft::RealFftPlanner;
 use rustfft::FftPlanner;
-use std::f64::consts::TAU;
 
 /// Spectral factorization via FFT (Kolmogorov 1939).
+///
+/// Uses real FFT for the power spectrum (O(m log m) instead of O(m·n)),
+/// then complex FFT for the Hilbert transform.
 pub fn spectral_fact_fft(r: &Arr) -> Arr {
     let n = r.len();
     let mult_factor = 100;
     let m = mult_factor * n;
 
-    // Build A matrix: A[i,j] = 1 for j=0, else 2·cos(ω_i·j)
-    // Use DFT frequency grid: ω_k = 2π·k/m for k = 0…m-1 (endpoint=False)
-    let step = TAU / m as f64;
-    let mut a = Arr::zeros(m, n);
-    for i in 0..m {
-        let wi = i as f64 * step;
-        a.set(i, 0, 1.0);
-        for j in 1..n {
-            a.set(i, j, 2.0 * (wi * j as f64).cos());
-        }
+    // --- FFT-based power spectrum (matches C++ approach) ---
+    // Zero-pad r to length m, then rfft: S[k] = Σ r[j]·exp(-i·2π·k·j/m)
+    // R_ω[k] = 2·Re(S[k]) - r₀  (since Re(S[k]) = r₀/2 + Σ_{j=1}^{n-1} r[j]·cos(...))
+    let mut pad = vec![0.0; m];
+    for i in 0..n {
+        pad[i] = r[i];
     }
+    let mut real_planner = RealFftPlanner::<f64>::new();
+    let r2c = real_planner.plan_fft_forward(m);
+    let mut spectrum = r2c.make_output_vec(); // len = m/2 + 1
+    r2c.process(&mut pad, &mut spectrum)
+        .expect("realfft forward failed");
 
-    // R = A @ r  (matrix-vector multiply)
+    let r0 = r[0];
     let mut r_vals = Arr::new(m);
-    for i in 0..m {
-        let mut sum = 0.0;
-        for j in 0..n {
-            sum += a.get(i, j) * r[j];
-        }
-        r_vals[i] = sum;
+    let half = m / 2;
+    for k in 0..=half {
+        r_vals[k] = 2.0 * spectrum[k].re - r0;
+    }
+    for k in 1..half {
+        r_vals[m - k] = r_vals[k];
     }
 
     // Clip near-zero / negative values

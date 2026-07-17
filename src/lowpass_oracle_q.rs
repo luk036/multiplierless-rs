@@ -1,16 +1,26 @@
 use crate::lowpass_oracle::LowpassOracle;
 use crate::spectral_fact::{inverse_spectral_fact, spectral_fact};
-use csd::to_csdnnz;
-use csd::to_decimal;
 use ellalgo_rs::arr::Arr;
 use ellalgo_rs::cutting_plane::{OracleOptim, OracleOptimQ, ParallelCut};
 
-fn csd_quantize(num: f64, nnz: u32) -> f64 {
-    if num == 0.0 {
+/// Direct double → double CSD quantization (matches C++ `csd_quantize`).
+fn csd_quantize_direct(mut num: f64, mut nnz: u32) -> f64 {
+    if num == 0.0 || nnz == 0 {
         return 0.0;
     }
-    let csd_str = to_csdnnz(num, nnz);
-    to_decimal(&csd_str)
+    let exp = (num.abs() * 1.5).log2().ceil() as i32 - 1;
+    let mut bit_val = 2.0_f64.powi(exp);
+    let mut result = 0.0;
+    while nnz > 0 && num.abs() > 1e-100 {
+        if (1.5 * num).abs() > bit_val {
+            let sgn = if num > 0.0 { 1.0 } else { -1.0 };
+            result += sgn * bit_val;
+            num -= sgn * bit_val;
+            nnz -= 1;
+        }
+        bit_val *= 0.5;
+    }
+    result
 }
 
 pub struct LowpassOracleQ {
@@ -50,7 +60,7 @@ impl OracleOptimQ<Arr> for LowpassOracleQ {
             let n = h.len();
             let mut hcsd = Arr::new(n);
             for i in 0..n {
-                hcsd[i] = csd_quantize(h[i], self.nnz);
+                hcsd[i] = csd_quantize_direct(h[i], self.nnz);
             }
             self.rcsd = inverse_spectral_fact(&hcsd);
             self.num_retries = 0;
