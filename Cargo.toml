@@ -2,6 +2,7 @@
 name = "multiplierless-rs"
 version = "0.1.1"
 edition = "2021"
+rust-version = "1.70"
 description = "Multiplierless FIR Filter optimization (using Ellipsoid Method) — Rust port"
 repository = "https://github.com/luk036/multiplierless-rs"
 license = "MIT OR Apache-2.0"
