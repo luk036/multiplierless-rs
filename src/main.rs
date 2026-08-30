@@ -5,7 +5,7 @@ use ellalgo_rs::cutting_plane::{cutting_plane_optim_q, Options};
 use ellalgo_rs::ell::Ell;
 use multiplierless_rs::lowpass_oracle::{FilterDesignConstruct, LowpassOracle};
 use multiplierless_rs::lowpass_oracle_q::LowpassOracleQ;
-use multiplierless_rs::spectral_fact::{spectral_fact_fft, spectral_fact_root};
+use multiplierless_rs::spectral_fact::{spectral_fact_select, SpectralMethod};
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;
@@ -251,11 +251,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     };
 
-    let h = if spec.spectral_method == "fft" {
-        spectral_fact_fft(&r)
+    let method = if spec.spectral_method == "fft" {
+        SpectralMethod::Fft
     } else {
-        spectral_fact_root(&r, spec.root_tolerance)
+        SpectralMethod::Root
     };
+    let h = spectral_fact_select(&r, method, spec.root_tolerance);
 
     let coefficients: Vec<CoeffOutput> = h
         .iter()

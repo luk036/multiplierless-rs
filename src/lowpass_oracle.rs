@@ -1,6 +1,35 @@
 use ellalgo_rs::arr::{linspace, Arr};
 use ellalgo_rs::cutting_plane::{OracleOptim, ParallelCut};
+use ellalgo_rs::round_robin::RoundRobin;
 use std::f64::consts::PI;
+
+/// Scan `count` rows of `mat` in round-robin order and return the first
+/// violating cut reported by `check`, or None if none of the rows violate.
+///
+/// This is the shared Template-Method skeleton for the passband, stopband, and
+/// non-redundant constraint scans (mirrors `scan_constraints` in
+/// multiplierless-cpp and `_scan_constraints` in the Python port).
+fn scan_constraints(
+    mat: &Arr,
+    rr: &mut RoundRobin,
+    count: usize,
+    x: &Arr,
+    check: impl FnMut(usize, f64) -> Option<(Arr, ParallelCut)>,
+) -> Option<(Arr, ParallelCut)> {
+    let mut check = check;
+    for _ in 0..count {
+        let k = rr.advance() as usize;
+        let v = mat.data()[k * mat.cols()..(k + 1) * mat.cols()]
+            .iter()
+            .zip(x.data().iter())
+            .map(|(a, b)| a * b)
+            .sum();
+        if let Some(cut) = check(k, v) {
+            return Some(cut);
+        }
+    }
+    None
+}
 
 /// Filter design construct containing all parameters for lowpass filter design.
 #[derive(Clone)]
@@ -89,36 +118,25 @@ impl FilterDesignConstruct {
 
 pub struct LowpassOracle {
     pub(crate) fdc: FilterDesignConstruct,
-    i_ap: usize,
-    i_as: usize,
-    i_anr: usize,
-    g_buf: Arr, // pre-allocated gradient buffer
+    rr_ap: RoundRobin,  // passband scan: [0, ap.rows())
+    rr_as: RoundRobin,  // stopband scan: [0, as_.rows())
+    rr_anr: RoundRobin, // non-redundant scan: [0, anr.rows())
+    g_buf: Arr,         // pre-allocated gradient buffer
 }
 
 impl LowpassOracle {
     pub fn new(fdc: FilterDesignConstruct) -> Self {
         let n = fdc.n;
+        let n_ap = fdc.ap.rows() as i32;
+        let n_as = fdc.as_.rows() as i32;
+        let n_anr = fdc.anr.rows() as i32;
         Self {
             fdc,
-            i_ap: 0,
-            i_as: 0,
-            i_anr: 0,
+            rr_ap: RoundRobin::new(n_ap),
+            rr_as: RoundRobin::new(n_as),
+            rr_anr: RoundRobin::new(n_anr),
             g_buf: Arr::new(n),
         }
-    }
-
-    /// Dot product — sequential with auto-vectorization.
-    /// For n=32, the compiler unrolls and SIMD-vectorizes this better than rayon.
-    #[inline]
-    fn dot_row(&self, mat: &Arr, row: usize, x: &Arr) -> f64 {
-        let n = mat.cols();
-        let start = row * n;
-        let row_data = &mat.data()[start..start + n];
-        row_data
-            .iter()
-            .zip(x.data().iter())
-            .map(|(a, b)| a * b)
-            .sum()
     }
 
     /// Fill a pre-allocated gradient buffer from a matrix row (memcpy).
@@ -152,67 +170,67 @@ impl OracleOptim<Arr> for LowpassOracle {
             return ((g, ParallelCut(-x[0], None)), false);
         }
 
+        // Passband constraints: lp_sq <= v <= up_sq.
         let n_ap = self.fdc.ap.rows();
-        for _ in 0..n_ap {
-            if self.i_ap == n_ap {
-                self.i_ap = 0;
-            }
-            let v = self.dot_row(&self.fdc.ap, self.i_ap, x);
+        if let Some((g, cut)) = scan_constraints(&self.fdc.ap, &mut self.rr_ap, n_ap, x, |k, v| {
             if v > self.fdc.upsq {
-                let g = Self::fill_grad(&mut self.g_buf, &self.fdc.ap, self.i_ap, 1.0);
-                let cut = ParallelCut(v - self.fdc.upsq, Some(v - self.fdc.lpsq));
-                self.i_ap += 1;
-                return ((g, cut), false);
+                Some((
+                    Self::fill_grad(&mut self.g_buf, &self.fdc.ap, k, 1.0),
+                    ParallelCut(v - self.fdc.upsq, Some(v - self.fdc.lpsq)),
+                ))
+            } else if v < self.fdc.lpsq {
+                Some((
+                    Self::fill_grad(&mut self.g_buf, &self.fdc.ap, k, -1.0),
+                    ParallelCut(-v + self.fdc.lpsq, Some(-v + self.fdc.upsq)),
+                ))
+            } else {
+                None
             }
-            if v < self.fdc.lpsq {
-                let g = Self::fill_grad(&mut self.g_buf, &self.fdc.ap, self.i_ap, -1.0);
-                let cut = ParallelCut(-v + self.fdc.lpsq, Some(-v + self.fdc.upsq));
-                self.i_ap += 1;
-                return ((g, cut), false);
-            }
-            self.i_ap += 1;
+        }) {
+            return ((g, cut), false);
         }
 
+        // Stopband constraint: 0 <= v <= spsq, tracking the maximum row.
         let n_as = self.fdc.as_.rows();
         let mut fmax = -1e100;
         let mut imax = 0;
-        for _ in 0..n_as {
-            if self.i_as == n_as {
-                self.i_as = 0;
-            }
-            let v = self.dot_row(&self.fdc.as_, self.i_as, x);
+        if let Some((g, cut)) = scan_constraints(&self.fdc.as_, &mut self.rr_as, n_as, x, |k, v| {
             if v > *spsq {
-                let g = Self::fill_grad(&mut self.g_buf, &self.fdc.as_, self.i_as, 1.0);
-                let cut = ParallelCut(v - *spsq, Some(v));
-                self.i_as += 1;
-                return ((g, cut), false);
+                Some((
+                    Self::fill_grad(&mut self.g_buf, &self.fdc.as_, k, 1.0),
+                    ParallelCut(v - *spsq, Some(v)),
+                ))
+            } else if v < 0.0 {
+                Some((
+                    Self::fill_grad(&mut self.g_buf, &self.fdc.as_, k, -1.0),
+                    ParallelCut(-v, Some(-v + *spsq)),
+                ))
+            } else {
+                if v > fmax {
+                    fmax = v;
+                    imax = k;
+                }
+                None
             }
-            if v < 0.0 {
-                let g = Self::fill_grad(&mut self.g_buf, &self.fdc.as_, self.i_as, -1.0);
-                let cut = ParallelCut(-v, Some(-v + *spsq));
-                self.i_as += 1;
-                return ((g, cut), false);
-            }
-            if v > fmax {
-                fmax = v;
-                imax = self.i_as;
-            }
-            self.i_as += 1;
+        }) {
+            return ((g, cut), false);
         }
 
+        // Non-redundant constraint: v >= 0.
         let n_anr = self.fdc.anr.rows();
-        for _ in 0..n_anr {
-            if self.i_anr == n_anr {
-                self.i_anr = 0;
-            }
-            let v = self.dot_row(&self.fdc.anr, self.i_anr, x);
-            if v < 0.0 {
-                let g = Self::fill_grad(&mut self.g_buf, &self.fdc.anr, self.i_anr, -1.0);
-                let cut = ParallelCut(-v, None);
-                self.i_anr += 1;
-                return ((g, cut), false);
-            }
-            self.i_anr += 1;
+        if let Some((g, cut)) =
+            scan_constraints(&self.fdc.anr, &mut self.rr_anr, n_anr, x, |k, v| {
+                if v < 0.0 {
+                    Some((
+                        Self::fill_grad(&mut self.g_buf, &self.fdc.anr, k, -1.0),
+                        ParallelCut(-v, None),
+                    ))
+                } else {
+                    None
+                }
+            })
+        {
+            return ((g, cut), false);
         }
 
         *spsq = fmax;

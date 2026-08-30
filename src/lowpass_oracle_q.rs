@@ -30,6 +30,9 @@ pub struct LowpassOracleQ {
     num_retries: u32,
 }
 
+/// Maximum number of retry attempts for the quantized optimization.
+const MAX_RETRIES: u32 = 15;
+
 impl LowpassOracleQ {
     pub fn new(nnz: u32, lowpass: LowpassOracle) -> Self {
         let n = lowpass.fdc.n;
@@ -83,7 +86,7 @@ impl OracleOptimQ<Arr> for LowpassOracleQ {
             (gc, hc_adj),
             shrunk,
             self.rcsd.clone(),
-            self.num_retries < 15,
+            self.num_retries < MAX_RETRIES,
         )
     }
 }

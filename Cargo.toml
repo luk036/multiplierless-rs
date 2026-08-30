@@ -8,7 +8,7 @@ repository = "https://github.com/luk036/multiplierless-rs"
 license = "MIT OR Apache-2.0"
 
 [dependencies]
-ellalgo-rs = "0.1.8"
+ellalgo-rs = "0.1.9"
 csd-rs = "0.1.6"
 ginger-rs = "0.1.5"
 rustfft = "6.2"

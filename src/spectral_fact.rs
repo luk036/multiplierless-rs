@@ -5,6 +5,24 @@ use num_complex::Complex;
 use realfft::RealFftPlanner;
 use rustfft::FftPlanner;
 
+/// Spectral factorization method selector (Strategy pattern).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SpectralMethod {
+    Fft,
+    Root,
+}
+
+/// Spectral factorization with explicit method selection.
+///
+/// Dispatches to [`spectral_fact_fft`] or [`spectral_fact_root`] based on
+/// `method`; `tolerance` is used only by the root-finding method.
+pub fn spectral_fact_select(r: &Arr, method: SpectralMethod, tolerance: f64) -> Arr {
+    match method {
+        SpectralMethod::Fft => spectral_fact_fft(r),
+        SpectralMethod::Root => spectral_fact_root(r, tolerance),
+    }
+}
+
 /// Spectral factorization via FFT (Kolmogorov 1939).
 ///
 /// Uses real FFT for the power spectrum (O(m log m) instead of O(m·n)),
