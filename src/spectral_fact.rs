@@ -176,6 +176,7 @@ pub fn spectral_fact_root(r: &Arr, tolerance: f64) -> Arr {
 }
 
 /// Spectral factorization (convenience, delegates to FFT variant).
+#[inline]
 pub fn spectral_fact(r: &Arr) -> Arr {
     spectral_fact_fft(r)
 }

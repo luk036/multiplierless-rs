@@ -59,51 +59,67 @@ struct VerilogSpec {
     form: String,
 }
 
+#[inline]
 fn default_filter_order() -> usize {
     32
 }
+#[inline]
 fn default_passband_edge() -> f64 {
     0.12
 }
+#[inline]
 fn default_stopband_edge() -> f64 {
     0.20
 }
+#[inline]
 fn default_passband_ripple() -> f64 {
     0.125
 }
+#[inline]
 fn default_stopband_attenuation() -> f64 {
     0.125
 }
+#[inline]
 fn default_csd_nnz() -> u32 {
     7
 }
+#[inline]
 fn default_discretization_factor() -> usize {
     15
 }
+#[inline]
 fn default_max_iters() -> usize {
     50000
 }
+#[inline]
 fn default_tolerance() -> f64 {
     1e-14
 }
+#[inline]
 fn default_ellipsoid_radius() -> f64 {
     40.0
 }
+#[inline]
 fn default_parallel_cut() -> bool {
     true
 }
+#[inline]
 fn default_spectral_method() -> String {
     "fft".to_string()
 }
+#[inline]
 fn default_root_tolerance() -> f64 {
     1e-8
 }
+#[inline]
 fn default_input_width() -> i32 {
     16
 }
+#[inline]
 fn default_module_name() -> String {
     "fir_filter".to_string()
 }
+#[inline]
 fn default_verilog_form() -> String {
     "transpose".to_string()
 }

@@ -44,6 +44,7 @@ pub struct FilterDesignConstruct {
 }
 
 impl FilterDesignConstruct {
+    #[inline]
     pub fn new_default(n: usize) -> Self {
         Self::new(n, 0.12, 0.20, 0.125, 0.125, 15)
     }
